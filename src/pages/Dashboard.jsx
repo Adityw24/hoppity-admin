@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Map, CheckCircle, XCircle, PlusCircle, TrendingUp, Clock } from 'lucide-react'
+import { Map, CheckCircle, XCircle, PlusCircle, TrendingUp, Activity } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 
@@ -8,25 +8,41 @@ export default function Dashboard() {
   const { user } = useAuth()
   const [stats, setStats] = useState({ total: 0, active: 0, inactive: 0, priced: 0 })
   const [recent, setRecent] = useState([])
+  const [recentLogs, setRecentLogs] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase
-        .from('Itineraries')
-        .select('id,title,slug,category,is_active,price_per_person,rating,created_at,location,cover_image_url')
-        .order('id', { ascending: false })
-        .limit(50)
+      const [
+        { count: total },
+        { count: active },
+        { count: priced },
+        { data: recentRows },
+        { data: recentLogs },
+      ] = await Promise.all([
+        supabase.from('Itineraries').select('*', { count: 'exact', head: true }),
+        supabase.from('Itineraries').select('*', { count: 'exact', head: true }).eq('is_active', true),
+        supabase.from('Itineraries').select('*', { count: 'exact', head: true }).gt('price_per_person', 0),
+        supabase
+          .from('Itineraries')
+          .select('id,title,slug,category,is_active,price_per_person,rating,created_at,location,cover_image_url')
+          .order('id', { ascending: false })
+          .limit(8),
+        supabase
+          .from('Admin_logs')
+          .select('id,admin_email,action,entity_title,created_at')
+          .order('created_at', { ascending: false })
+          .limit(6),
+      ])
 
-      if (data) {
-        setStats({
-          total: data.length,
-          active: data.filter(t => t.is_active).length,
-          inactive: data.filter(t => !t.is_active).length,
-          priced: data.filter(t => t.price_per_person > 0).length,
-        })
-        setRecent(data.slice(0, 8))
-      }
+      setStats({
+        total:    total    || 0,
+        active:   active   || 0,
+        inactive: (total   || 0) - (active || 0),
+        priced:   priced   || 0,
+      })
+      setRecent(recentRows || [])
+      setRecentLogs(recentLogs || [])
       setLoading(false)
     }
     load()
@@ -67,8 +83,8 @@ export default function Dashboard() {
 
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 32 }}>
-        <StatCard icon={Map} label="Total Itineraries" value={stats.total} sub="All time" />
-        <StatCard icon={CheckCircle} label="Active" value={stats.active} sub="Live on website + app" color="var(--green)" />
+        <StatCard icon={Map} label="Total Itineraries" value={stats.total} sub={`${stats.active} active · ${stats.inactive} draft`} />
+        <StatCard icon={CheckCircle} label="Active (Live)" value={stats.active} sub="Visible on website + app" color="var(--green)" />
         <StatCard icon={XCircle} label="Draft / Inactive" value={stats.inactive} sub="Hidden from users" color="var(--text-muted)" />
         <StatCard icon={TrendingUp} label="Priced Tours" value={stats.priced} sub="With fixed pricing" color="var(--purple-light)" />
       </div>
@@ -127,8 +143,8 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Quick actions */}
-        <div style={{ width: 200, flexShrink: 0 }}>
+        {/* Quick actions + Audit log */}
+        <div style={{ width: 220, flexShrink: 0 }}>
           <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>Quick Actions</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <Link to="/itineraries/new" style={{ textDecoration: 'none' }}>
@@ -148,6 +164,39 @@ export default function Dashboard() {
             <p className="section-label" style={{ marginBottom: 12 }}>Category Breakdown</p>
             {loading ? <div className="spinner" style={{ margin: '0 auto' }} /> : (
               <CategoryBreakdown data={recent} />
+            )}
+          </div>
+          
+          {/* Recent audit log */}
+          <div className="card" style={{ marginTop: 16, padding: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <p className="section-label">Recent Activity</p>
+              <Activity size={12} style={{ color: 'var(--text-dim)' }} />
+            </div>
+            {recentLogs.length === 0 ? (
+              <p style={{ fontSize: 11, color: 'var(--text-dim)', fontStyle: 'italic' }}>No activity yet</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {recentLogs.map(log => (
+                  <div key={log.id} style={{ borderLeft: '2px solid var(--border)', paddingLeft: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                      <span className={`badge ${
+                        log.action === 'create' ? 'badge-green' :
+                        log.action === 'delete' ? 'badge-red' :
+                        log.action === 'toggle_active' ? 'badge-amber' : 'badge-purple'
+                      }`} style={{ fontSize: 9 }}>
+                        {log.action}
+                      </span>
+                    </div>
+                    <p style={{ fontSize: 11, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>
+                      {log.entity_title || '—'}
+                    </p>
+                    <p style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>
+                      {log.admin_email?.split('@')[0]} · {new Date(log.created_at).toLocaleDateString('en-IN', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}
+                    </p>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>
