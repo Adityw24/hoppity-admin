@@ -353,6 +353,13 @@ export default function ItineraryList() {
                             <Pencil size={12} />
                           </button>
                         </Link>
+                        <Link
+  to={`/itineraries/parse?edit=${row.id}`}
+  className="btn btn-sm"
+  style={{ background: 'rgba(139,92,246,0.12)', color: 'var(--purple-light)', border: '1px solid rgba(139,92,246,0.3)', fontWeight: 600 }}
+>
+  ✦ AI
+</Link>
 
                         {/* Delete */}
                         <button
