@@ -333,19 +333,32 @@ export default function ItineraryParser() {
         reader.readAsDataURL(file)
       })
 
-      // Call via Supabase Edge Function (avoids CORS)
-      const { data, error } = await supabase.functions.invoke('parse-brochure', {
-        body: { pdf_base64: base64 },
+      // Call edge function directly (avoids Supabase client wrapper swallowing errors)
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+      const fnResponse = await fetch(`${supabaseUrl}/functions/v1/parse-brochure`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseKey}`,
+        },
+        body: JSON.stringify({ pdf_base64: base64 }),
       })
 
       clearInterval(stepInterval)
       setParseProgress(100)
       setParseStepIdx(PARSE_STEPS.length - 1)
 
-      if (error) throw new Error(error.message)
-      if (data?.error) throw new Error(data.error)
+      if (!fnResponse.ok) {
+        const errBody = await fnResponse.json().catch(() => ({}))
+        throw new Error(errBody.error || `HTTP ${fnResponse.status}`)
+      }
 
-      const parsed = data.result
+      const fnData = await fnResponse.json()
+      if (fnData?.error) throw new Error(fnData.error)
+
+      const parsed = fnData.result
 
       setTimeout(() => {
         setForm(prev => ({
