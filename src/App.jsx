@@ -5,6 +5,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import ItineraryList from './pages/ItineraryList'
 import ItineraryForm from './pages/ItineraryForm'
+import ItineraryParser from './pages/ItineraryParser'
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="itineraries" element={<ItineraryList />} />
             <Route path="itineraries/new" element={<ItineraryForm />} />
+            <Route path="itineraries/parse" element={<ItineraryParser />} />
             <Route path="itineraries/:id/edit" element={<ItineraryForm />} />
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
