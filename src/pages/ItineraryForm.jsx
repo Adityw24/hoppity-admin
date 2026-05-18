@@ -231,6 +231,21 @@ export default function ItineraryForm() {
       return { valid: false, errors, tab: tabFor('Basics') }
     }
 
+    const blurb = String(form.blurb || '').trim()
+    const blurbSentences = blurb.split(/[.!?]+/).filter(s => String(s).trim().length > 0)
+    if (!blurb) {
+      errors.push('Blurb is required')
+      return { valid: false, errors, tab: tabFor('Content') }
+    }
+    if (blurbSentences.length > 2) {
+      errors.push('Blurb should be 1-2 sentences')
+      return { valid: false, errors, tab: tabFor('Content') }
+    }
+    if (blurb.length > 220) {
+      errors.push('Blurb should be 220 characters or fewer')
+      return { valid: false, errors, tab: tabFor('Content') }
+    }
+
     if (form.price_per_person && isNaN(parseFloat(form.price_per_person))) {
       errors.push('Price per person must be a number')
       return { valid: false, errors, tab: tabFor('Basics') }
@@ -701,7 +716,7 @@ export default function ItineraryForm() {
           {tab === 'Content' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
-              <Field label="Blurb" hint="1-2 sentence description shown on listing cards">
+              <Field label="Blurb" required hint="1-2 sentence description shown on listing cards">
                 <textarea
                   className="field"
                   value={form.blurb}

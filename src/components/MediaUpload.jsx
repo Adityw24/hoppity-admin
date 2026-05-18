@@ -87,12 +87,17 @@ export default function MediaUpload({
     }
   }
 
+const [uploadProgress, setUploadProgress] = useState(0)  // files uploaded so far
+const [totalFiles, setTotalFiles] = useState(0)           // total files selected
+
   const handleLocalUpload = async (e) => {
     const files = Array.from(e.target.files || [])
     if (!files.length) return
     setUploading(true)
     setUploadError(null)
-    try {
+    setTotalFiles(files.length)      // ✅ set total
+    setUploadProgress(0)             // ✅ reset progress
+  try {
       for (const file of files) {
         const ext = file.name.split('.').pop()
         // Ensure folder has no leading/trailing slashes
@@ -106,7 +111,7 @@ export default function MediaUpload({
         if (error) throw error
         const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(path)
         addUrl(publicUrl)
-        if (!multiple) break // Only first file for single
+        setUploadProgress(prev => prev + 1)  // ✅ increment after each upload
       }
     } catch (err) {
       setUploadError(err.message)
@@ -128,10 +133,11 @@ export default function MediaUpload({
     setUrlInput('')
   }
 
-  const remove = (url) => {
-    if (multiple) onChange(values.filter(v => v !== url))
-    else onChange('')
-  }
+  // ✅ Fixed (use index)
+  const remove = (index) => {
+  if (multiple) onChange(values.filter((_, i) => i !== index))
+  else onChange('')
+}
 
   const tabStyle = (t) => ({
     padding: '6px 12px', fontSize: 12, fontWeight: tab === t ? 600 : 400,
@@ -141,21 +147,54 @@ export default function MediaUpload({
     fontFamily: 'DM Sans, sans-serif', transition: 'all 0.15s',
   })
 
+//drag to re-order logic
+const [dragIndex, setDragIndex] = useState(null)
+
+const handleDragStart = (i) => setDragIndex(i)
+
+const handleDrop = (i) => {
+  if (dragIndex === null || dragIndex === i) return
+  const updated = [...values]
+  const [moved] = updated.splice(dragIndex, 1)  // remove from old position
+  updated.splice(i, 0, moved)                    // insert at new position
+  onChange(updated)
+  setDragIndex(null)
+}
+
   return (
     <div>
-      {/* Preview grid */}
-      {multiple && values.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8, marginBottom: 12 }}>
-          {values.map((url, i) => (
-            <UploadedMedia key={i} url={url} onRemove={() => remove(url)} label={i === 0 ? 'Cover' : `Photo ${i + 1}`} />
-          ))}
-        </div>
-      )}
-      {!multiple && singleValue && (
-        <div style={{ marginBottom: 12 }}>
-          <UploadedMedia url={singleValue} onRemove={() => remove(singleValue)} />
-        </div>
-      )}
+{/* Preview grid */}
+{multiple && values.length > 0 && (
+  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8, marginBottom: 12 }}>
+    {values.map((url, i) => (
+      <div
+        key={i}
+        draggable
+        onDragStart={() => handleDragStart(i)}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={() => handleDrop(i)}
+        style={{
+          opacity: dragIndex === i ? 0.4 : 1,
+          cursor: 'grab',
+          transition: 'opacity 0.2s',
+        }}
+      >
+        {/* ✅ UploadedMedia is INSIDE the draggable div */}
+        <UploadedMedia
+          url={url}
+          onRemove={() => remove(i)}
+          label={i === 0 ? 'Cover' : `Photo ${i + 1}`}
+        />
+      </div>
+    ))}
+  </div>
+)}
+
+{!multiple && singleValue && (
+  <div style={{ marginBottom: 12 }}>
+    <UploadedMedia url={singleValue} onRemove={() => onChange('')} />
+  </div>
+)}
 
       {/* Upload tabs */}
       <div style={{
@@ -203,16 +242,19 @@ export default function MediaUpload({
                 {uploading ? (
                   <>
                     <Loader size={20} style={{ color: 'var(--purple-light)', animation: 'spin 1s linear infinite' }} />
-                    <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Uploading to Supabase Storage…</span>
+                    <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Uploading {uploadProgress > 0 ? `${uploadProgress} of ${totalFiles} files` : ''}…</span>
                   </>
                 ) : (
                   <>
                     <Upload size={20} style={{ color: 'var(--text-dim)' }} />
                     <span style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>
-                      Click to upload · JPG, PNG, WebP, MP4 · Max 50MB
-                    </span>
+      {multiple
+        ? 'Click to upload one or more · JPG, PNG, WebP, MP4 · Max 50MB each'
+        : 'Click to upload · JPG, PNG, WebP, MP4 · Max 50MB'}
+    </span>
                   </>
                 )}
+
               </label>
               {uploadError && (
                 <p style={{ marginTop: 8, fontSize: 12, color: 'var(--red)' }}>{uploadError}</p>
